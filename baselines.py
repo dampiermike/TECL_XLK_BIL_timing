@@ -3,7 +3,7 @@
 from data import load_all
 from engine import buy_hold, fmt
 
-prices, returns = load_all()
+prices, returns = load_all(include_tecs=True)   # TECS listed for reference only
 cash = returns["BIL"]
 START = "2009-01-02"  # first full day all of XLK/TECL/TECS/BIL trade
 

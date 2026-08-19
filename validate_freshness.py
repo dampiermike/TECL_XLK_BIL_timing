@@ -31,7 +31,8 @@ from datetime import date, timedelta
 
 DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json")
 
-EQUITIES = ["XLK", "TECL", "TECS", "BIL", "QQQ", "SPY", "TLT", "HYG", "SHY"]
+# TECS is absent on purpose: not downloaded, not traded. See download_data.py.
+EQUITIES = ["XLK", "TECL", "BIL", "QQQ", "SPY", "TLT", "HYG", "SHY"]
 INDICES = ["VIX", "VXN", "IRX"]
 
 INDEX_SLACK = 1      # trading days an index may lag the equity consensus

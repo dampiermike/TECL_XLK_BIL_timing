@@ -36,7 +36,7 @@ if len(live) > 10:
         print(f"   {c:<12} r = {live['pct_TECS'].corr(live[c]):+.3f}")
 
 print("\n\nB) same long core, crash gate toggled on/off\n")
-prices, returns = load_all()
+prices, returns = load_all(include_tecs=True)   # this script exists to test TECS
 cash = returns["BIL"]
 f = build_features(prices, "XLK")
 

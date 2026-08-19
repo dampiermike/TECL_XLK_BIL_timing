@@ -112,7 +112,10 @@ trap on_failure ERR
     $PY validate_freshness.py
 
     echo
-    echo "── Step 3/5: Loader + TECS split repair sanity (betas must hold ±3) ──"
+    echo "── Step 3/5: Loader sanity (TECL beta must hold +3 vs XLK) ──"
+    # TECS is not loaded here: it is never held (final.PARAMS crash_mom_thr=None),
+    # so its feed must not be able to halt the run. `python data.py --tecs` runs
+    # the old split-repair check on demand.
     $PY data.py
 
     echo

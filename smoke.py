@@ -4,7 +4,7 @@ from data import load_all
 from engine import run, metrics, buy_hold, fmt
 from strategy import build_features, make_target
 
-prices, returns = load_all()
+prices, returns = load_all(include_tecs=True)   # several cases below hold TECS
 cash = returns["BIL"]
 f = build_features(prices, "XLK")
 START = "2009-01-02"

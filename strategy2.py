@@ -116,6 +116,24 @@ def make_target(f, p):
     return tgt.dropna()
 
 
+def risk_sleeves(returns, p):
+    """The risk assets this run can allocate to, in column order.
+
+    TECS is present only when the caller asked for it via load_all(include_tecs=True);
+    the traded strategy does not. A crash gate without TECS returns would silently
+    become an unfunded no-op, so refuse that combination rather than report a
+    backtest whose short sleeve quietly did nothing.
+    """
+    if "TECS" in returns.columns:
+        return ["TECL", "TECS", "XLK"]
+    if p.get("crash_mom_thr") is not None:
+        raise ValueError(
+            "crash gate is enabled but TECS returns are not loaded -- "
+            "use data.load_all(include_tecs=True)"
+        )
+    return ["TECL", "XLK"]
+
+
 def vol_target_weights(f, p, returns):
     """Alternative sizing: hold the ladder's asset but scale exposure to a vol budget.
 
@@ -125,10 +143,11 @@ def vol_target_weights(f, p, returns):
     tgt = make_target(f, p)
     real = {"TECL": f[f"vol{p['vol_n']}"] * 3.0, "TECS": f[f"vol{p['vol_n']}"] * 3.0,
             "XLK": f[f"vol{p['vol_n']}"], "BIL": None}
-    w = pd.DataFrame(0.0, index=tgt.index, columns=["TECL", "TECS", "XLK", "BIL"])
+    sleeves = risk_sleeves(returns, p)
+    w = pd.DataFrame(0.0, index=tgt.index, columns=sleeves + ["BIL"])
     fixed = {"TECL": p.get("tecl_w", 1.0), "TECS": p.get("tecs_w", 1.0),
              "XLK": p.get("xlk_w", 1.0)}
-    for a in ["TECL", "TECS", "XLK"]:
+    for a in sleeves:
         m = tgt == a
         if not m.any():
             continue
@@ -139,7 +158,7 @@ def vol_target_weights(f, p, returns):
             scale = scale.clip(lower=p.get("min_weight", 0.0)) * fixed[a]
             scale = scale.reindex(tgt.index)  # features span more dates than the target
         w.loc[m, a] = scale.reindex(tgt.index).fillna(0.0)[m]
-    w["BIL"] = 1.0 - w[["TECL", "TECS", "XLK"]].sum(axis=1)
+    w["BIL"] = 1.0 - w[sleeves].sum(axis=1)
     return w
 
 
@@ -189,11 +208,12 @@ def make_target_vote(f, p):
 
 def vote_weights(f, p, returns):
     tgt = make_target_vote(f, p)
-    w = pd.DataFrame(0.0, index=tgt.index, columns=["TECL", "TECS", "XLK", "BIL"])
+    sleeves = risk_sleeves(returns, p)
+    w = pd.DataFrame(0.0, index=tgt.index, columns=sleeves + ["BIL"])
     fixed = {"TECL": p.get("tecl_w", 1.0), "TECS": p.get("tecs_w", 1.0), "XLK": p.get("xlk_w", 1.0)}
-    for a in ["TECL", "TECS", "XLK"]:
+    for a in sleeves:
         m = tgt == a
         if m.any():
             w.loc[m, a] = fixed[a]
-    w["BIL"] = 1.0 - w[["TECL", "TECS", "XLK"]].sum(axis=1)
+    w["BIL"] = 1.0 - w[sleeves].sum(axis=1)
     return w
