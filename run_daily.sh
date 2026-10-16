@@ -124,23 +124,9 @@ trap on_failure ERR
 
     echo
     echo "── Step 5/5: Current signal ──"
-    # state_signal on the last row is what that close says to hold next session;
-    # state_held is what the position was during that day. See README "Outputs".
-    # NB: no single quotes below — the program is inside a single-quoted shell string.
-    $PY -c '
-import pandas as pd
-eq = pd.read_csv("results/equity_curve.csv", index_col=0, parse_dates=True)
-last, prev = eq.iloc[-1], eq.iloc[-2]
-sig, prev_sig, held = last["state_signal"], prev["state_signal"], last["state_held"]
-w = {c[2:]: float(last[c] or 0) for c in ("w_TECL", "w_XLK", "w_BIL")}
-mix = "  ".join(f"{k} {v:.0%}" for k, v in w.items() if v > 0)
-note = f"** CHANGED from {prev_sig} **" if sig != prev_sig else "(unchanged)"
-ret, eq_x, dd = float(last["ret_net"]), float(last["equity"]), float(last["drawdown"])
-print(f"  as of close:   {last.name.date()}")
-print(f"  signal:        {sig}   {note}")
-print(f"  held that day: {held}   [{mix}]")
-print(f"  day return:    {ret:+.2%}    equity {eq_x:.2f}x    drawdown {dd:.1%}")
-' | tee "$SIGNAL_FILE"
+    # Full indicator report: every gate with its threshold and live value, plus a
+    # glossary. Written to $SIGNAL_FILE and mailed verbatim in the heartbeat below.
+    $PY signal_report.py | tee "$SIGNAL_FILE"
 
     echo
     echo "── Commit & push data ──"
@@ -153,17 +139,18 @@ print(f"  day return:    {ret:+.2%}    equity {eq_x:.2f}x    drawdown {dd:.1%}")
 } 2>&1 | tee "$LOG_FILE"
 
 # ── Heartbeat on success ──────────────────────────────────────────────────────
+# The signal report leads; run diagnostics go underneath it, since the whole
+# point of the mail is the action line at the top.
 alert_body="/tmp/TECL_XLK_ok_$$.txt"
 {
+    cat "$SIGNAL_FILE" 2>/dev/null || echo "(no signal captured)"
+    echo ""
+    echo "─── Run ───"
     echo "$PROJECT_NAME daily run completed successfully."
     echo "Timestamp: $(date)"
     echo "Log file:  $ROOT_DIR/$LOG_FILE"
-    echo ""
-    echo "─── Signal ───"
-    cat "$SIGNAL_FILE" 2>/dev/null || echo "(no signal captured)"
-    echo ""
-    echo "─── Last 30 log lines ───"
-    tail -n 30 "$LOG_FILE"
 } > "$alert_body"
-send_alert "✅ $PROJECT_NAME daily OK" "$alert_body"
+# Subject carries the action so the position is readable without opening the mail.
+SUBJECT="$($PY signal_report.py --subject 2>/dev/null)" || SUBJECT=""
+send_alert "${SUBJECT:-✅ $PROJECT_NAME daily OK}" "$alert_body"
 rm -f "$alert_body"
