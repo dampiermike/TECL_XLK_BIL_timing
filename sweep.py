@@ -25,8 +25,8 @@ FULL_START = "2009-01-02"
 _G = {}
 
 
-def _init(signal_ticker):
-    prices, returns = load_all()
+def _init(signal_ticker, include_tecs):
+    prices, returns = load_all(include_tecs=include_tecs)
     _G["returns"] = returns
     _G["cash"] = returns["BIL"]
     _G["f"] = build_features(prices, signal_ticker)
@@ -81,10 +81,18 @@ def _eval(job):
         return None
 
 
-def sweep(kind, spec, cost_bps=10.0, signal_ticker="XLK", workers=None, chunk=200):
+def sweep(kind, spec, cost_bps=10.0, signal_ticker="XLK", workers=None, chunk=200,
+          include_tecs=None):
+    """include_tecs defaults to whether the grid actually turns the crash gate on,
+    so long-only stages do not depend on the TECS feed. _eval swallows exceptions,
+    so a stage that needs TECS and cannot load it would otherwise report zero valid
+    combos instead of an error -- hence the explicit load here."""
     jobs = [(kind, p, cost_bps) for p in grid(spec)]
+    if include_tecs is None:
+        include_tecs = any(p.get("crash_mom_thr") is not None for _, p, _ in jobs)
     workers = workers or max(1, mp.cpu_count() - 2)
-    with mp.Pool(workers, initializer=_init, initargs=(signal_ticker,)) as pool:
+    with mp.Pool(workers, initializer=_init,
+                 initargs=(signal_ticker, include_tecs)) as pool:
         rows = pool.map(_eval, jobs, chunksize=chunk)
     rows = [r for r in rows if r]
     return pd.DataFrame(rows), len(jobs)

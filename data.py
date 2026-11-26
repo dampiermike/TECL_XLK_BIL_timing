@@ -1,7 +1,18 @@
 """
-Shared data loading + repair for the TECL / XLK / TECS timing project.
+Shared data loading + repair for the TECL / XLK / BIL timing project.
 
-Two EODHD defects matter here and both are repaired at load time:
+TECS IS NOT TRADED and is NOT loaded by default. tecs_verdict.py and
+tecs_final_check.py concluded the short sleeve subtracts value at every exposure
+level above noise, so final.PARAMS sets crash_mom_thr=None and the crash gate
+never fires. Pass include_tecs=True to load_all() if you are re-running that
+research; everything on the daily path leaves it out.
+
+That default also isolates the daily run from the TECS feed itself, which EODHD
+corrupted on 2026-08-18 (it rewrote ~4,400 historical bars to a flat 0.2 close).
+The split-repair check below is correct to reject that data -- there is simply no
+reason for a ticker the strategy never holds to be able to halt the pipeline.
+
+Two EODHD defects matter for TECS and both are repaired at load time:
 
 1. TECS `adjusted_close` is unusable. Its ratio to `close` moves on ~900 days,
    so its daily returns are not the fund's returns (regressed vs XLK it gives
@@ -86,23 +97,24 @@ def tecs_returns(xlk_ret):
     return repaired
 
 
-def load_all():
+def load_all(include_tecs=False):
     """Return (prices, returns) frames indexed on the common trading calendar.
 
     `prices` holds a synthetic total-return index for every traded ticker
     (base 100 at each ticker's first observation) so backtests only ever
     compound returns, never a raw price that a split could dislocate.
+
+    include_tecs adds the repaired TECS series. Off by default -- the strategy
+    does not trade TECS (see the module docstring), and loading it would let a
+    bad vendor feed for an unused ticker fail the whole run.
     """
-    tickers = ["XLK", "TECL", "TECS", "BIL", "QQQ", "SPY", "TLT", "HYG", "SHY"]
+    tickers = ["XLK", "TECL", "BIL", "QQQ", "SPY", "TLT", "HYG", "SHY"]
     idx_tickers = ["VIX", "VXN", "IRX"]
 
     raw = {t: _raw(t) for t in tickers + idx_tickers}
-    rets = {}
-    for t in tickers:
-        if t == "TECS":
-            continue
-        rets[t] = raw[t]["adjusted_close"].pct_change()
-    rets["TECS"] = tecs_returns(rets["XLK"])
+    rets = {t: raw[t]["adjusted_close"].pct_change() for t in tickers}
+    if include_tecs:
+        rets["TECS"] = tecs_returns(rets["XLK"])
 
     returns = pd.DataFrame(rets).sort_index()
     prices = (1 + returns.fillna(0)).cumprod() * 100
@@ -120,18 +132,19 @@ def load_all():
     return prices, returns
 
 
-def sanity_report():
-    prices, returns = load_all()
+def sanity_report(include_tecs=False):
+    prices, returns = load_all(include_tecs=include_tecs)
     x = returns["XLK"]
+    checks = [("TECL", 3.0)] + ([("TECS", -3.0)] if include_tecs else [])
     print("leverage check on repaired data (2009+):")
-    for t, want in [("TECL", 3.0), ("TECS", -3.0)]:
+    for t, want in checks:
         j = pd.concat([x, returns[t]], axis=1, join="inner").dropna()
         j = j[j.index >= "2009-01-01"]
         j.columns = ["x", "y"]
         beta = np.polyfit(j["x"], j["y"], 1)[0]
         print(f"  {t:<5} beta={beta:+.3f} (want {want:+.1f})  corr={j['x'].corr(j['y']):+.4f}  n={len(j)}")
     print("\nspan / worst day per ticker:")
-    for t in ["XLK", "TECL", "TECS", "BIL"]:
+    for t in [c[0] for c in checks] + ["XLK", "BIL"]:
         s = returns[t].dropna()
         print(f"  {t:<5} {s.index[0].date()} -> {s.index[-1].date()}  "
               f"n={len(s):>5}  min={s.min():+.2%} max={s.max():+.2%}")
@@ -139,4 +152,7 @@ def sanity_report():
 
 
 if __name__ == "__main__":
-    sanity_report()
+    import sys
+    # `python data.py --tecs` re-runs the TECS split repair + beta check; the
+    # daily pipeline deliberately does not, since TECS is never held.
+    sanity_report(include_tecs="--tecs" in sys.argv)

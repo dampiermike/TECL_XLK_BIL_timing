@@ -7,8 +7,14 @@ on every split, so welding an old file to a new tail fabricates split-sized bars
 
 Requires EODHD_API_TOKEN in the environment (it's in ~/.bash_profile).
 
-Traded:   XLK (1x tech), TECL (3x tech long), TECS (3x tech short), BIL (T-bills)
+Traded:   XLK (1x tech), TECL (3x tech long), BIL (T-bills)
 Signals:  QQQ, SPY, TLT, HYG, and the VIX / VXN / IRX indices
+
+TECS is deliberately not downloaded. The strategy never holds it (see final.py),
+and on 2026-08-18 EODHD began serving a corrupted history for it -- ~4,400 bars
+flattened to a 0.2 close -- which would overwrite the good json/TECS.json kept
+for the archived TECS research. Add it to EQUITIES only if that feed is fixed
+AND the short sleeve is being reconsidered.
 """
 
 import json
@@ -18,7 +24,7 @@ import time
 
 import requests
 
-EQUITIES = ["XLK", "TECL", "TECS", "BIL", "QQQ", "SPY", "TLT", "HYG", "SHY"]
+EQUITIES = ["XLK", "TECL", "BIL", "QQQ", "SPY", "TLT", "HYG", "SHY"]
 INDICES = ["VIX", "VXN", "IRX"]  # EODHD serves these on the INDX exchange
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json")
 START = sys.argv[1] if len(sys.argv) > 1 else "1999-01-01"

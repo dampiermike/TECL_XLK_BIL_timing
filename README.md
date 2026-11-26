@@ -1,13 +1,14 @@
-# TECL / XLK / TECS regime timing
+# TECL / XLK / BIL regime timing
 
-Rotate a single tech sleeve between **XLK** (market up), **TECL** (3x long, breakout),
-**TECS** (3x inverse, crash) and **BIL** (T-bills, sideways).
+Rotate a single tech sleeve between **XLK** (market up), **TECL** (3x long, breakout)
+and **BIL** (T-bills, sideways).
 
 Target: **CAGR ≥ 30%, max drawdown ≤ 30%.**
 
 **Result: 34.5% CAGR / −24.9% max drawdown, Sharpe 1.16** (2009-01 → 2026-07, 10 bps/side).
-Both targets met with margin. **TECS is not used** — it was tested exhaustively and
-subtracts value at every exposure level above noise. See *The TECS verdict* below.
+Both targets met with margin. A fourth sleeve, **TECS** (3x inverse, crash), was tested
+exhaustively and **rejected** — it subtracts value at every exposure level above noise.
+See *The TECS verdict* below. It is not traded, not loaded, and not downloaded.
 
 ![strategy](strategy_final.png)
 
@@ -139,6 +140,28 @@ After repair: **TECL beta +2.98, TECS beta −2.98, |corr| 0.995**.
 
 Because `close` excludes distributions, the repaired TECS series slightly
 understates its true return — conservative, and TECS isn't used anyway.
+
+### TECS is no longer downloaded (2026-08-18)
+
+On 2026-08-18 EODHD began serving a corrupted TECS history: 4,412 of 4,443 bars
+came back with open/high/low/close flattened to a literal `0.2` and zero volume.
+The split-repair check above caught it and correctly refused the data — but
+because `data.load_all()` loaded TECS unconditionally, a ticker the strategy
+never holds was able to halt the entire daily run.
+
+TECS is therefore removed from `download_data.py` and `validate_freshness.py`,
+and `load_all()` now takes `include_tecs=False` by default. `json/TECS.json` is
+frozen at the last good bar (2026-08-17) so the archived TECS research still
+reproduces. To re-run any of it:
+
+```
+python data.py --tecs          # split repair + beta −3.0 check
+```
+
+and pass `include_tecs=True` to `load_all()` — `baselines.py`, `smoke.py` and
+`tecs_verdict.py` already do. `sweep.py` decides automatically from whether the
+grid actually enables the crash gate. Asking for a crash gate without TECS
+returns loaded raises rather than silently backtesting an unfunded short sleeve.
 
 ## Files
 
